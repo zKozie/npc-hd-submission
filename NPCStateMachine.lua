@@ -16,7 +16,7 @@ type BaseState<C> = {
 	--[[
 		Dictionary of state_name = function that returns if transition is allowed
 	]]
-	StateData: {} | any, -- Used to store data for the state
+	StateData: {[string]: any}, -- Used to store data for the state
 	
 	-- !! PUBLIC METHODS !!
 	EnterState: (self: BaseState<C>, machine: StateMachine<C>) -> (),
@@ -162,7 +162,8 @@ local function checkNearbyTarget(character: Model, current_cf: CFrame): Model?
 	overlap_params.FilterType = Enum.RaycastFilterType.Include
 	overlap_params.FilterDescendantsInstances = {workspace.Characters}
 	local sphere_cast = workspace:GetPartBoundsInBox(current_cf, Vector3.one*100, overlap_params)
-
+	-- I figured that using raycasting here instead of iterating through the whole folder is better for performance
+	-- My reasoning here is that it is almost O(1) lookup? Not sure but I think it's better than O(n) if iterating the folder
 	if #sphere_cast ~= 0 then --> Checks if there is a character within range
 		for _, child in pairs(sphere_cast) do
 			-- Validates if the parent is a model
