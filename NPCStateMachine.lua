@@ -405,42 +405,31 @@ local function checkNearbyTarget(character: Model, current_cf: CFrame): Model?
 	overlap_params.FilterDescendantsInstances = {workspace.Characters}
 
 	local sphere_cast = workspace:GetPartBoundsInBox(current_cf, Vector3.one * 100, overlap_params)
-
+	if #sphere_cast == 0 then return nil end
 	-- If nothing is returned then there are no nearby characters
-	if #sphere_cast ~= 0 then
-		for _, child in pairs(sphere_cast) do
+	for _, child in pairs(sphere_cast) do
+		-- Convert the part into its character model
+		local model = child:FindFirstAncestorOfClass("Model") or continue
+		-- SKIPS if no model was found
+		if not model then continue end
+		-- SKIPS our own character
+		if model == character then continue end
+		-- SKIPS models that don't represent characters
+		if not model:FindFirstChildOfClass("Humanoid") then continue end
 
-			-- Convert the part into its character model
-			local model = child:FindFirstAncestorOfClass("Model")
-			if not model then
-				continue
-			end
+		-- Simple visibility check using dot product.
+		-- This prevents the AI from detecting targets behind it.
+		local look_character = current_cf.LookVector.Unit
+		local look_target = (model:GetPivot().Position - current_cf.Position).Unit
 
-			-- Ignore our own character
-			if model == character then
-				continue
-			end
+		local dot_product = look_character:Dot(look_target)
 
-			-- Only consider models that actually represent characters
-			if model:FindFirstChildOfClass("Humanoid") then
-
-				-- Simple visibility check using dot product.
-				-- This prevents the AI from detecting targets behind it.
-				local look_character = current_cf.LookVector.Unit
-				local look_target = (model:GetPivot().Position - current_cf.Position).Unit
-
-				local dot_product = look_character:Dot(look_target)
-
-				-- 0.707 roughly corresponds to a 45 degree vision
-				if dot_product < 0.707 then
-					continue
-				end
-
-				return model
-			end
-		end
+		-- 0.707 roughly corresponds to a 45 degree vision
+		if dot_product < 0.707 then continue end
+		return model
 	end
 
+	-- Returns nil if no model was found
 	return nil
 end
 
@@ -650,31 +639,24 @@ local States: {State} = {
 				return
 			end
 
-
 			-- Once a waypoint is reached we pause briefly before moving on.
 			-- This gives the patrol a more natural pacing instead of instantly
 			-- snapping to the next point.
 			if state_data.Reached then
-
 				state_data.ElapsedSinceReached += dt
 
 				-- If we finished the final waypoint we return to Idle.
 				if state_data.ElapsedSinceReached >= 3 and state_data.CurrentPathIndex >= #state_data.Path then
-
 					machine:Transition("Idle")
-
 				elseif state_data.ElapsedSinceReached >= 3 then
-
 					-- Advance to the next waypoint and reset timers.
 					state_data.ElapsedSinceReached = 0
 					state_data.CurrentPathIndex += 1
 					state_data.Reached = false
-
 				end
 
 				return
 			end
-
 
 			-- Active waypoint the NPC should currently move toward.
 			local current_path = state_data.Path[state_data.CurrentPathIndex] :: Vector3
@@ -725,9 +707,7 @@ local States: {State} = {
 
 
 		EnterState = function(self: State, machine: Machine)
-
 			print("Entered Detect")
-
 		end,
 
 
@@ -771,25 +751,20 @@ local States: {State} = {
 			-- The NPC continually moves toward the target while the state is active.
 			humanoid:MoveTo(target_cf.Position)
 
-
+			if (target_cf.Position - current_cf.Position).Magnitude >= 5 then return end
 			-- Once the NPC gets close enough we resolve the interaction.
 			-- This parts a bit unrealistic but it demonstrates it.
-			if (target_cf.Position - current_cf.Position).Magnitude <= 5 then
+			state_data.Processing = true
 
-				state_data.Processing = true
+			target_humanoid:TakeDamage(100)
 
-				target_humanoid:TakeDamage(100)
+			-- Small delay to simulate attack resolution.
+			task.wait(1)
 
-				-- Small delay to simulate attack resolution.
-				task.wait(1)
+			context.Target:Destroy()
+			context.Target = nil
 
-				context.Target:Destroy()
-				context.Target = nil
-
-				machine:Transition("Idle")
-
-			end
-
+			machine:Transition("Idle")
 		end,
 
 
